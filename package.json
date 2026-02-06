@@ -1,0 +1,16 @@
+{
+  "name": "smmp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Social Media Management Portal",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
