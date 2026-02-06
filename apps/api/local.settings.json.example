@@ -1,0 +1,13 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "DATABASE_URL": "postgresql://user:password@localhost:5432/smmp?schema=public",
+    "JWT_SECRET": "your-super-secret-jwt-key",
+    "GEMINI_API_KEY": "your-gemini-api-key"
+  },
+  "Host": {
+    "CORS": "*"
+  }
+}
