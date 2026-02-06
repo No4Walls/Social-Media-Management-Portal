@@ -1,0 +1,348 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  OWNER
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum Platform {
+  INSTAGRAM
+  FACEBOOK
+  LINKEDIN
+  TWITTER
+  TIKTOK
+  YOUTUBE
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum SubscriptionTier {
+  STARTER
+  GROWTH
+  PRO
+  ENTERPRISE
+}
+
+model User {
+  id                String           @id @default(cuid())
+  email             String           @unique
+  passwordHash      String
+  name              String
+  avatarUrl         String?
+  emailVerified     Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  memberships       TeamMember[]
+  createdPosts      Post[]           @relation("PostCreator")
+  assignedPosts     Post[]           @relation("PostAssignee")
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+}
+
+model Organization {
+  id                String           @id @default(cuid())
+  name              String
+  slug              String           @unique
+  logoUrl           String?
+  timezone          String           @default("UTC")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  members           TeamMember[]
+  socialAccounts    SocialAccount[]
+  posts             Post[]
+  campaigns         Campaign[]
+  automationRules   AutomationRule[]
+  subscription      Subscription?
+  analyticsSnapshots AnalyticsSnapshot[]
+  auditLogs         AuditLog[]
+  apiKeys           ApiKey[]
+  webhooks          Webhook[]
+}
+
+model TeamMember {
+  id                String           @id @default(cuid())
+  role              UserRole         @default(VIEWER)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  userId            String
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, organizationId])
+}
+
+model SocialAccount {
+  id                String           @id @default(cuid())
+  platform          Platform
+  platformAccountId String
+  username          String
+  displayName       String?
+  avatarUrl         String?
+  accessToken       String
+  refreshToken      String?
+  tokenExpiresAt    DateTime?
+  scopes            String[]
+  isActive          Boolean          @default(true)
+  lastSyncAt        DateTime?
+  followerCount     Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  posts             Post[]
+  analyticsSnapshots AnalyticsSnapshot[]
+  engagementEvents  EngagementEvent[]
+  
+  @@unique([platform, platformAccountId])
+}
+
+model Post {
+  id                String           @id @default(cuid())
+  content           String
+  mediaUrls         String[]
+  hashtags          String[]
+  status            PostStatus       @default(DRAFT)
+  scheduledAt       DateTime?
+  publishedAt       DateTime?
+  platformPostId    String?
+  errorMessage      String?
+  aiGenerated       Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  socialAccountId   String
+  socialAccount     SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  
+  creatorId         String
+  creator           User             @relation("PostCreator", fields: [creatorId], references: [id])
+  
+  assigneeId        String?
+  assignee          User?            @relation("PostAssignee", fields: [assigneeId], references: [id])
+  
+  campaignId        String?
+  campaign          Campaign?        @relation(fields: [campaignId], references: [id])
+  
+  analytics         PostAnalytics?
+  engagementEvents  EngagementEvent[]
+  approvals         PostApproval[]
+}
+
+model PostAnalytics {
+  id                String           @id @default(cuid())
+  impressions       Int              @default(0)
+  reach             Int              @default(0)
+  likes             Int              @default(0)
+  comments          Int              @default(0)
+  shares            Int              @default(0)
+  saves             Int              @default(0)
+  clicks            Int              @default(0)
+  engagementRate    Float            @default(0)
+  lastUpdatedAt     DateTime         @default(now())
+  
+  postId            String           @unique
+  post              Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model PostApproval {
+  id                String           @id @default(cuid())
+  status            String           @default("PENDING")
+  comment           String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  postId            String
+  post              Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  approverId        String
+}
+
+model Campaign {
+  id                String           @id @default(cuid())
+  name              String
+  description       String?
+  status            CampaignStatus   @default(DRAFT)
+  startDate         DateTime?
+  endDate           DateTime?
+  budget            Float?
+  goals             Json?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  posts             Post[]
+}
+
+model EngagementEvent {
+  id                String           @id @default(cuid())
+  type              String
+  platformEventId   String?
+  authorId          String?
+  authorUsername    String?
+  authorAvatarUrl   String?
+  content           String?
+  sentiment         String?
+  isRead            Boolean          @default(false)
+  isReplied         Boolean          @default(false)
+  createdAt         DateTime         @default(now())
+  
+  socialAccountId   String
+  socialAccount     SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  
+  postId            String?
+  post              Post?            @relation(fields: [postId], references: [id])
+  
+  @@index([socialAccountId, createdAt])
+}
+
+model AnalyticsSnapshot {
+  id                String           @id @default(cuid())
+  date              DateTime
+  followers         Int              @default(0)
+  following         Int              @default(0)
+  totalPosts        Int              @default(0)
+  totalReach        Int              @default(0)
+  totalImpressions  Int              @default(0)
+  totalEngagement   Int              @default(0)
+  engagementRate    Float            @default(0)
+  topPostIds        String[]
+  createdAt         DateTime         @default(now())
+  
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  socialAccountId   String
+  socialAccount     SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  
+  @@unique([organizationId, socialAccountId, date])
+  @@index([organizationId, date])
+}
+
+model AutomationRule {
+  id                String           @id @default(cuid())
+  name              String
+  description       String?
+  isActive          Boolean          @default(true)
+  trigger           Json
+  conditions        Json?
+  actions           Json
+  runCount          Int              @default(0)
+  lastRunAt         DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id                String           @id @default(cuid())
+  tier              SubscriptionTier @default(STARTER)
+  status            String           @default("active")
+  stripeCustomerId  String?
+  stripeSubscriptionId String?
+  currentPeriodStart DateTime?
+  currentPeriodEnd  DateTime?
+  aiCreditsUsed     Int              @default(0)
+  aiCreditsLimit    Int              @default(1000)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  organizationId    String           @unique
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id                String           @id @default(cuid())
+  action            String
+  entityType        String
+  entityId          String
+  metadata          Json?
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime         @default(now())
+  
+  userId            String
+  user              User             @relation(fields: [userId], references: [id])
+  
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  @@index([organizationId, createdAt])
+}
+
+model ApiKey {
+  id                String           @id @default(cuid())
+  name              String
+  keyHash           String           @unique
+  lastUsedAt        DateTime?
+  expiresAt         DateTime?
+  isActive          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model Webhook {
+  id                String           @id @default(cuid())
+  url               String
+  events            String[]
+  secret            String
+  isActive          Boolean          @default(true)
+  lastTriggeredAt   DateTime?
+  failureCount      Int              @default(0)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id                String           @id @default(cuid())
+  type              String
+  title             String
+  message           String
+  isRead            Boolean          @default(false)
+  metadata          Json?
+  createdAt         DateTime         @default(now())
+  
+  userId            String
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, isRead, createdAt])
+}
