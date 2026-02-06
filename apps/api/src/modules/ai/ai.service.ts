@@ -19,14 +19,14 @@ interface GenerateReplyOptions {
 
 @Injectable()
 export class AiService {
-  private openaiApiKey: string;
-  private openaiBaseUrl = 'https://api.openai.com/v1';
+  private geminiApiKey: string;
+  private geminiBaseUrl = 'https://generativelanguage.googleapis.com/v1beta';
 
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
   ) {
-    this.openaiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
+    this.geminiApiKey = this.configService.get<string>('GEMINI_API_KEY') || '';
   }
 
   async generateContent(organizationId: string, options: GenerateContentOptions): Promise<{ content: string; hashtags: string[] }> {
@@ -50,7 +50,7 @@ export class AiService {
     Make it engaging, include relevant emojis, and optimize for the platform's best practices.
     Keep it concise but impactful.`;
 
-    const response = await this.callOpenAI(prompt);
+    const response = await this.callGemini(prompt);
     await this.deductCredits(organizationId, 1);
 
     return response.content || '';
@@ -63,7 +63,7 @@ export class AiService {
     Return only the hashtags, one per line, including the # symbol.
     Mix popular and niche hashtags for optimal reach.`;
 
-    const response = await this.callOpenAI(prompt);
+    const response = await this.callGemini(prompt);
     await this.deductCredits(organizationId, 1);
 
     return (response.content || '')
@@ -82,7 +82,7 @@ export class AiService {
     
     Keep the reply helpful, on-brand, and appropriate for public social media.`;
 
-    const response = await this.callOpenAI(prompt);
+    const response = await this.callGemini(prompt);
     await this.deductCredits(organizationId, 1);
 
     return response.content || '';
@@ -99,10 +99,11 @@ export class AiService {
       "keywords": ["key", "words", "found"]
     }`;
 
-    const response = await this.callOpenAI(prompt);
+    const response = await this.callGemini(prompt);
     
     try {
-      return JSON.parse(response.content || '{"sentiment":"neutral","score":0.5,"keywords":[]}');
+      const jsonStr = (response.content || '').replace(/```json\n?|\n?```/g, '').trim();
+      return JSON.parse(jsonStr || '{"sentiment":"neutral","score":0.5,"keywords":[]}');
     } catch {
       return { sentiment: 'neutral', score: 0.5, keywords: [] };
     }
@@ -121,10 +122,11 @@ export class AiService {
     Response format (JSON array):
     [{"day": "Monday", "time": "9:00 AM", "reason": "explanation"}]`;
 
-    const response = await this.callOpenAI(prompt);
+    const response = await this.callGemini(prompt);
     
     try {
-      return JSON.parse(response.content || '[]');
+      const jsonStr = (response.content || '').replace(/```json\n?|\n?```/g, '').trim();
+      return JSON.parse(jsonStr || '[]');
     } catch {
       return [
         { day: 'Tuesday', time: '10:00 AM', reason: 'Generally high engagement time' },
@@ -143,7 +145,7 @@ export class AiService {
     Adapt the tone, length, and format to match ${toPlatform}'s best practices.
     Maintain the core message while optimizing for the new platform.`;
 
-    const response = await this.callOpenAI(prompt);
+    const response = await this.callGemini(prompt);
     await this.deductCredits(organizationId, 1);
 
     return response.content || '';
@@ -161,33 +163,42 @@ export class AiService {
     Make it engaging and optimized for ${options.platform}'s algorithm.`;
   }
 
-  private async callOpenAI(prompt: string): Promise<{ content: string }> {
-    if (!this.openaiApiKey) {
-      return { content: 'AI service not configured. Please add OPENAI_API_KEY to environment.' };
+  private async callGemini(prompt: string): Promise<{ content: string }> {
+    if (!this.geminiApiKey) {
+      return { content: 'AI service not configured. Please add GEMINI_API_KEY to environment.' };
     }
 
     try {
-      const response = await fetch(`${this.openaiBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.openaiApiKey}`,
+      const response = await fetch(
+        `${this.geminiBaseUrl}/models/gemini-1.5-flash:generateContent?key=${this.geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: `You are a social media marketing expert helping create engaging content.\n\n${prompt}`,
+                  },
+                ],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 500,
+            },
+          }),
         },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'You are a social media marketing expert helping create engaging content.' },
-            { role: 'user', content: prompt },
-          ],
-          max_tokens: 500,
-          temperature: 0.7,
-        }),
-      });
+      );
 
       const data = await response.json();
-      return { content: data.choices?.[0]?.message?.content || '' };
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return { content: text };
     } catch (error) {
-      console.error('OpenAI API error:', error);
+      console.error('Gemini API error:', error);
       return { content: '' };
     }
   }
