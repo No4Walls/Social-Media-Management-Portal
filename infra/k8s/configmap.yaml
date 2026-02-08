@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: smmp-config
+  namespace: smmp
+data:
+  NODE_ENV: "production"
+  FRONTEND_URL: "https://smmp.example.com"
+  API_URL: "https://api.smmp.example.com"

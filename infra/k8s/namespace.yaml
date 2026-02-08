@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smmp
+  labels:
+    app.kubernetes.io/name: smmp
+    app.kubernetes.io/part-of: social-media-management-portal
